@@ -1,0 +1,136 @@
+# ---
+# jupyter:
+#   jupytext:
+#     text_representation:
+#       extension: .py
+#       format_name: light
+#       format_version: '1.5'
+#       jupytext_version: 1.13.7
+#   kernelspec:
+#     display_name: Python 3
+#     name: python3
+# ---
+
+# # Rough Outline - Temporal Fusion Transformer (TensorFlow / Keras)
+# *Goal: Build a TFT model for Nifty prediction using a more "from-scratch" approach.*
+# *Methodology: Use TensorFlow and Keras to build the model architecture manually.*
+# *Note: This requires a much deeper understanding of deep learning layers and data windowing.*
+
+# ## 1. Imports and Setup
+# Imports are focused on TensorFlow and standard data science libraries.
+
+import pandas as pd
+import numpy as np
+import yfinance as yf
+import tensorflow as tf
+from tensorflow import keras
+from tensorflow.keras import layers
+from sklearn.preprocessing import MinMaxScaler
+from sklearn.model_selection import TimeSeriesSplit
+import optuna
+import warnings
+
+warnings.filterwarnings('ignore')
+
+# ## 2. Data Loading and Preparation
+# This part remains the same as the other models.
+
+# Load market data (Nifty)
+nifty_df = yf.download('^NSEI', start='2019-01-01', end='2024-12-31')
+
+# Load external data from local files
+vix_df = pd.read_csv('vix_data.csv', parse_dates=['Date'], index_col='Date')
+macro_df = pd.read_csv('macro_data.csv', parse_dates=['Date'], index_col='Date')
+
+# Combine and clean
+merged_df = nifty_df.join(vix_df['Price'].rename('India_VIX'), how='inner')
+merged_df = merged_df.join(macro_df, how='inner')
+df = merged_df[['Close', 'High', 'Low', 'Volume', 'India_VIX', 'Interest_Rate', 'USD_INR']]
+
+print("Data loaded. Shape:", df.shape)
+
+
+# ## 3. Feature Engineering
+# The same feature creation logic applies here.
+
+def create_advanced_features(data):
+    """Create the same set of features as the other model."""
+    # This function would contain the same logic as the XGBoost notebook:
+    # - RSI, MACD, Bollinger Bands, ATR calculations
+    # - GARCH Volatility Forecast
+    # - Lag features are less critical here as the model learns from sequences, but can be included.
+    df = data.copy()
+    df['RSI'] = df['Close'].rolling(14).mean() # simplified placeholder
+    return df
+
+featured_df = create_advanced_features(df)
+print("Feature engineering complete.")
+
+
+# ## 4. Manual Data Windowing
+# This is a critical step. We need a function to create sequences from our flat table.
+
+def create_sequences(data, target, past_steps=60, future_steps=1):
+    """
+    Creates sequences of past observations (X) and future targets (y).
+    """
+    X, y = [], []
+    for i in range(past_steps, len(data) - future_steps + 1):
+        X.append(data.iloc[i - past_steps:i, 0:data.shape[1]])
+        y.append(target.iloc[i + future_steps - 1:i + future_steps, 0])
+    return np.array(X), np.array(y)
+
+# TODO: Split data into training/validation/test sets BEFORE scaling.
+# Then scale each set based on the training set's scaler.
+# X_train, y_train = create_sequences(train_df, train_target)
+# ... etc.
+
+print("Data windowing function defined.")
+
+
+# ## 5. Building the TFT Model in Keras
+# This is the most complex part. We would define custom layers and then
+# use the Keras Functional API to connect them into the full TFT architecture.
+
+# TODO: Define custom layers like GatedLinearUnit, VariableSelectionNetwork, etc.
+# Example custom layer:
+# class GatedLinearUnit(layers.Layer):
+#     # ... implementation ...
+
+# TODO: Define the full TFT model architecture using the functional API.
+# This would involve connecting inputs, GRN layers, attention layers, and outputs.
+# def build_tft_model(input_shape, hidden_units, attention_heads, dropout_rate):
+#     # ... complex Keras code to define the model architecture ...
+#     # model = keras.Model(inputs=..., outputs=...)
+#     # model.compile(optimizer='adam', loss='mse')
+#     # return model
+
+print("TFT model architecture would be defined here.")
+
+
+# ## 6. Model Training and Tuning with Optuna
+# The Optuna objective function would now build and train our Keras model.
+# Still using TimeSeriesSplit for robust validation.
+
+# def objective_tft_tf(trial):
+#     # Suggest hyperparameters for the Keras model
+#     # hidden_units = trial.suggest_int(...)
+#     # dropout_rate = trial.suggest_float(...)
+
+#     # Run walk-forward validation loop...
+#     # for fold ...
+#     #     build_tft_model(...)
+#     #     model.fit(...)
+#     #     calculate error ...
+#
+#     # return average_error
+
+# print("Optuna objective function for Keras model would be defined here.")
+
+
+# ## 7. Final Evaluation
+# Same final step: train the best model on the full training set and evaluate
+# on a completely held-out test set to get a final, unbiased performance measure.
+
+print("Outline complete. This approach requires significant custom Keras development.")
+
