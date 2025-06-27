@@ -1,0 +1,173 @@
+# ---
+# jupyter:
+#   jupytext:
+#     text_representation:
+#       extension: .py
+#       format_name: light
+#       format_version: '1.5'
+#       jupytext_version: 1.13.7
+#   kernelspec:
+#     display_name: Python 3
+#     name: python3
+# ---
+
+# # Rough Outline - Quantitative Forecasting Model
+# *Goal: Test if a model using technicals, volatility, and macro data can predict Nifty 1-day forward movement.*
+# *Methodology: XGBoost with Optuna tuning and Walk-Forward validation.*
+
+# ## 1. Imports and Setup
+# Import all necessary libraries upfront.
+
+import pandas as pd
+import numpy as np
+import yfinance as yf
+from arch import arch_model
+import xgboost as xgb
+from sklearn.model_selection import TimeSeriesSplit
+from sklearn.preprocessing import MinMaxScaler
+from sklearn.metrics import mean_squared_error
+import optuna
+import warnings
+
+warnings.filterwarnings('ignore')
+optuna.logging.set_verbosity(optuna.logging.WARNING)
+
+
+# ## 2. Data Loading and Preparation
+# First step is to get all the data sources and merge them into a single, clean DataFrame.
+# Need to be careful about matching dates correctly.
+
+# TODO: Check date formats for all CSVs to ensure they match.
+
+# Load market data (Nifty)
+# Using yfinance for now, might switch to a local CSV later for speed.
+nifty_df = yf.download('^NSEI', start='2019-01-01', end='2024-12-31')
+
+# Load external data from local files
+vix_df = pd.read_csv('vix_data.csv', parse_dates=['Date'], index_col='Date')
+macro_df = pd.read_csv('macro_data.csv', parse_dates=['Date'], index_col='Date')
+
+# Combine everything
+# Using inner join to make sure we only have dates where all data is present.
+merged_df = nifty_df.join(vix_df['Price'].rename('India_VIX'), how='inner')
+merged_df = merged_df.join(macro_df, how='inner')
+
+# Clean up final dataframe
+df = merged_df[['Close', 'High', 'Low', 'Volume', 'India_VIX', 'Interest_Rate', 'USD_INR']]
+
+print("Data loaded and merged. Shape:", df.shape)
+df.head()
+
+
+# ## 3. Feature Engineering
+# This is where the real "alpha" comes from. Create all the features (clues) for the model.
+
+def calculate_rsi(series, length=14):
+    # Standard RSI calculation logic...
+    delta = series.diff()
+    gain = (delta.where(delta > 0, 0)).rolling(window=length).mean()
+    loss = (-delta.where(delta < 0, 0)).rolling(window=length).mean()
+    rs = gain / loss
+    return 100 - (100 / (1 + rs))
+
+# TODO: Write manual functions for MACD, Bollinger Bands, ATR etc.
+# For now, just sketching out the main function.
+
+def create_advanced_features(data):
+    """Main function to orchestrate feature creation."""
+    df = data.copy()
+
+    # Technicals
+    df['RSI'] = calculate_rsi(df['Close'])
+    # ... more indicators here ...
+
+    # GARCH Volatility Forecast
+    returns = df['Close'].pct_change().dropna() * 100
+    am = arch_model(returns, vol='Garch', p=1, q=1)
+    res = am.fit(disp='off')
+    df['GARCH_Volatility'] = res.forecast(horizon=1).variance.shift(1)
+
+    # Lags (Memory)
+    for lag in [1, 3, 5, 10]:
+        df[f'Close_Lag_{lag}'] = df['Close'].shift(lag)
+        df[f'VIX_Lag_{lag}'] = df['India_VIX'].shift(lag)
+
+    # Target variable
+    df['target'] = df['Close'].shift(-1)
+    
+    df.dropna(inplace=True)
+    return df
+
+featured_df = create_advanced_features(df)
+print("Feature engineering complete.")
+featured_df.info()
+
+
+# ## 4. Model Tuning with Optuna
+# Set up the objective function for Optuna to find the best hyperparameters.
+# This will use walk-forward validation internally to get a robust error score.
+
+X = featured_df.drop('target', axis=1)
+y = featured_df['target']
+
+def objective(trial):
+    # Define the hyperparameter search space
+    params = {
+        'objective': 'reg:squarederror',
+        'n_estimators': trial.suggest_int('n_estimators', 400, 1500),
+        'learning_rate': trial.suggest_float('learning_rate', 0.01, 0.2),
+        'max_depth': trial.suggest_int('max_depth', 3, 7),
+        # ... other params like subsample, colsample_bytree ...
+        'n_jobs': -1,
+        'random_state': 42
+    }
+
+    # Run the full walk-forward validation loop inside here
+    # ...
+    # tscv = TimeSeriesSplit(n_splits=5)
+    # loop through folds, train model, get predictions, calculate rmse
+    # ...
+    
+    # Placeholder for the real calculation
+    average_rmse = 0 # This would be np.mean(fold_rmses)
+    
+    return average_rmse
+
+# NOTE: The actual study will take a long time. Running a small version first.
+# study = optuna.create_study(direction='minimize')
+# study.optimize(objective, n_trials=50) # Use more trials for real run
+
+# print("Best params found:", study.best_params)
+
+
+# ## 5. Final Model Training and Evaluation
+# After finding the best params with Optuna, train one final model on the full training set
+# and evaluate it on a hold-out test set that was never seen during tuning.
+
+# Split data into a final training and hold-out test set
+# For example, use everything up to 2024 for training, and use 2024 data for the final test.
+train_final = featured_df.loc[:'2023-12-31']
+test_final = featured_df.loc['2024-01-01':]
+
+# Define X and y for the final train/test
+# ...
+
+# Get best params from the Optuna study (pasting them here after the study runs)
+best_params = {
+    'objective': 'reg:squarederror',
+    # ... paste the best params here ...
+}
+
+# Train the final model
+# final_model = xgb.XGBRegressor(**best_params)
+# final_model.fit(X_train_final_scaled, y_train_final)
+
+# Evaluate on the hold-out set
+# ...
+# predictions = final_model.predict(X_test_final_scaled)
+# final_rmse = np.sqrt(mean_squared_error(y_test_final, predictions))
+# print(f"Final Hold-Out Test RMSE: {final_rmse}")
+
+# Plot the results
+# ...
+
