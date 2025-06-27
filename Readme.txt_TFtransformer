@@ -1,0 +1,33 @@
+Quantitative Forecasting Engine: Temporal Fusion Transformer (TensorFlow Edition)
+This document outlines the design for a state-of-the-art quantitative forecasting system using a Temporal Fusion Transformer (TFT). This version is architected using TensorFlow and Keras, providing a flexible framework for building the model from more fundamental components.
+Section 1: The Basic Theory
+
+The core theory remains the same as our XGBoost model: we aim to find a statistical edge by quantifying the drivers of market behavior. However, the TFT approach refines this theory by acknowledging that the importance of our "clues" changes over time and that their interactions are incredibly complex.
+
+A TFT is designed not just to look at a snapshot of today's data, but to understand the entire "movie" of the last several weeks or months. It can learn, for example, that a gradual rise in interest rates over 90 days has a different impact than a sudden shock. It is built to simultaneously learn short-term patterns (like daily volatility) and long-term patterns (like evolving economic trends).
+
+The goal is to build a model that can dynamically pay attention to the most relevant features and past time steps when making a forecast.
+
+Section 2: The Core Techniques
+While using the same data, the methodology to build a TFT model in TensorFlow involves manually constructing many of the components that a specialized library would handle automatically.
+
+1. The Model Architecture: Temporal Fusion Transformer
+The TFT is a deep learning architecture that we will build using TensorFlow/Keras. It is an integrated system of custom layers:
+* Gating Layers (GatedLinearUnit): These act as intelligent filters, allowing the model to ignore irrelevant data and focus only on the most valuable information. We will implement these as custom Keras layers.
+* Variable Selection Networks: Custom layers that learn which of our features (RSI, VIX, GARCH, etc.) are the most important for the prediction.
+* Encoder-Decoder Structure: We will manually structure the model to process sequences of past data (the encoder) and use that information to make structured predictions about the future (the decoder).
+* Multi-Head Self-Attention Layer: This is the core of the Transformer. We will use TensorFlow's built-in MultiHeadAttention layer, which allows the model to look back over all past data points and decide which moments in time are most relevant for predicting the next step.
+
+2. Data Handling
+Since we are not using a high-level library, we must manually prepare the data into "windows" suitable for a time-series model. This involves writing a Python function that:
+* Takes our flat table of features.
+* Slides a "window" across the data (e.g., taking a 60-day window of past data as input X).
+* Assigns the next day's price as the corresponding target y.
+* This creates a dataset where each sample is a sequence of past observations.
+3. Validation and Tuning
+The principles remain the same, but the implementation is more manual.
+* Validation: We would still use a rigorous Walk-Forward Validation approach (TimeSeriesSplit) to prevent overfitting.
+* Tuning: We would still use a framework like Optuna, but it would be tuning the hyperparameters of our custom-built Keras model, such as: learning_rate, hidden_layer_size, number_of_attention_heads, and dropout_rate. Training and tuning a TFT is significantly more computationally expensive and typically requires a GPU.
+
+Section 3: Project Timeline
+Building a robust TFT model from scratch in TensorFlow is a major undertaking. The learning curve is steep, as it requires a strong understanding of both deep learning theory and the Keras functional API. For a dedicated individual, a realistic timeline to build, tune, and understand a working TFT model using this approach would likely be several weeks to a few months.
